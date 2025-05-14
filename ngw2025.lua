@@ -22,7 +22,7 @@ MUSIC_TRACKS_ADDR=0x13E64
 SOUND_STATE_ADDR=0x13FFC
 
 function getSoundState()
-	state={}
+	local state={}
 	
 	state.track=peek(SOUND_STATE_ADDR)
 	state.frame=peek(SOUND_STATE_ADDR+1)
@@ -32,7 +32,7 @@ function getSoundState()
 end
 
 function getTrackPatterns(track,frame)
-	patterns={}
+	local patterns={}
 	
 	local value=0
 	
@@ -54,39 +54,73 @@ function getPatternNote(pattern, row)
 	-- get last four bits
 	return peek(MUSIC_PATTERNS_ADDR+192*(pattern-1)+3*row)& 0x0F
 end
+
+function getTotalNotes(track)
+	local totalNotes=0
+	for frame=0,15 do
+		local patterns=getTrackPatterns(track,frame)
+		
+		local chNotes={}
+		for row=0,15 do
+			for i=0,1 do
+				note=getPatternNote(patterns[i+1],row)
+				if note == 1 then
+					totalNotes=totalNotes+1
+				end
+			end
+		end
+	end
+	return totalNotes
+end
 	
 function getSoundRegister(channel)
-	sound = {}
+	local sound = {}
 	
-	value = peek(0xFF9C+18*channel+1)<<8|peek(0xFF9C+18*channel)
+	local value = peek(0xFF9C+18*channel+1)<<8|peek(0xFF9C+18*channel)
 	sound.frequency = (value&0x0fff)
 	sound.volume = (value&0xf000)>>12
 	
 	return sound
 end
 
+function drawComputer()
+	spr(8,
+						CENTER.x+offset.x,
+						CENTER.y+offset.y,
+						14,2,0,0,2,2)
+end
+
 musicplaying=false
+endTrack=2
+currentTrack=-1
+measures=0
+isDownBeat=false
 
-function TIC()
-	-- ensure we only start the music a single time
- if not musicplaying then
-  music(0)
-  musicplaying = true
- end
-	
-	player={
-		x=PLAYER_ORIGIN.x,
-		y=PLAYER_ORIGIN.y
-	}
-	
-	leader={
-		x=LEADER_ORIGIN.x,
-		y=LEADER_ORIGIN.y
-	}
+score=0
+totalNotes=0
 
+player={
+	x=PLAYER_ORIGIN.x,
+	y=PLAYER_ORIGIN.y
+}
+
+leader={
+	x=LEADER_ORIGIN.x,
+	y=LEADER_ORIGIN.y
+}
+
+rowHits={
+	L=false,
+	R=false
+}
+
+function mainGame()
 	cls(13)
-	print("Catch the music!!",74,104)
+	print("Catch the music!!",74,100)
+	--print("currentTrack: "..currentTrack, 30, 10)
+	print("Score: "..score,95, 110)
 	
+	--[[
 	if btn(2) then 
 		-- player.x=player.x-16
 		print("L!", 
@@ -98,75 +132,127 @@ function TIC()
 			player.x+16+8+offset.x, 
 			player.y-16+offset.y)
 	end
+	]]--
 	
-	if btnp(2) then 
-		-- player.x=player.x-16
-		print("hit!", 
-			player.x+offset.x, 
-			player.y-16+offset.y-10) 
-	elseif btnp(3) then 
-		-- player.x=player.x-16
-		print("hit!", 
-			player.x+16+8+offset.x, 
-			player.y-16+offset.y-10) 
-	end
-	
-	state=getSoundState()
+	local state=getSoundState()
 	--print("track: "..state.track,20,120)
 	--print("frame: "..state.frame,80,120)
 	--print("row: "..state.row,160,120)
 
-	patterns=getTrackPatterns(state.track,state.frame)
+	if state.track == 255 then
+		musicplaying = false
+	end
+
+	local patterns=getTrackPatterns(state.track,state.frame)
 
 	for p=1,4 do
 		--print("p"..p..": "..patterns[p], p*30+30, 130)
 	end
 	
-	chNotes={}
+	local chNotes={}
 	for i=0,3 do
 		chNotes[i+1]=getPatternNote(patterns[i+1],state.row)
 		--print("ch"..i.." note: "..chNotes[i+1], 50, 10+i*10)
 	end
 	
+	if chNotes[3] < 4 then
+		rowHits.L=false
+	end
+	
+	if chNotes[4] < 4 then
+		rowHits.R=false
+	end
+	
 	-- TODO: clean up
-	if chNotes[1] >= 4 then
+	if currentTrack > 0 and chNotes[1] >= 4 then
 		spr(22,
 							leader.x+offset.x-8,
 							leader.y+offset.y-16-8,
 							14,2,0,0,1,1)
-	elseif chNotes[2] >= 4 then
+	elseif currentTrack > 0 and chNotes[2] >= 4 then
 		spr(22,
 							leader.x+offset.x+16+8,
 							leader.y+offset.y-16-8,
 							14,2,0,0,1,1)
 	end
 	
-	if chNotes[3] >= 4 then 
-		spr(6, 
-			player.x+offset.x, 
-			player.y-24+offset.y,
-			14,2,0,0,1,1)
-	elseif chNotes[4] >= 4 then
-		spr(6,
-			player.x+16+8+offset.x, 
-			player.y-24+offset.y,
-			14,2,0,0,1,1)
+	if currentTrack > 0 and chNotes[3] >= 4 then
+		--print("LL??", 40, 30)
+		if btnp(2) then
+				rowHits.L=true
+				score=score+1
+		end
+		
+		if rowHits.L then
+			spr(7,
+				player.x+offset.x, 
+				player.y-24+offset.y,
+				14,2,0,0,1,1)
+		elseif not rowHits.L then
+			spr(6,
+				player.x+offset.x, 
+				player.y-24+offset.y,
+				14,2,0,0,1,1)
+		end
+		
+	elseif currentTrack > 0 and chNotes[4] >= 4 then
+		if btnp(3) then
+			rowHits.R=true
+			score=score+1
+		end
+		
+		if rowHits.R then
+			spr(7,
+				player.x+16+8+offset.x, 
+				player.y-24+offset.y,
+				14,2,0,0,1,1)
+		elseif not rowHits.R then
+			spr(6,
+				player.x+16+8+offset.x, 
+				player.y-24+offset.y,
+				14,2,0,0,1,1)
+		end
 	end
+	
+	--[[
+	if btnp(2) and chNotes[3] >= 4 then 
+		print("hit!", 
+			player.x+offset.x, 
+			player.y-16+offset.y-10) 
+	elseif btnp(3) and chNotes[4] >= 4 then 
+		-- player.x=player.x-16
+		print("hit!", 
+			player.x+16+8+offset.x, 
+			player.y-16+offset.y-10) 
+	end
+	]]--
 
 	-- DRAW
 	--spr(33+t%60//30*2,x,y,14,2,0,0,2,2)
-	--computer
-	spr(8,
-						CENTER.x+offset.x,
-						CENTER.y+offset.y,
-						14,2,0,0,2,2)
+	drawComputer()
 
-	isDownBeat=state.row % 4 == 0
-	beat=state.row % 4
-	spr(10+beat, beat*4, 0, 14, 2, 0, 0, 1, 1)
+	--only inc measures on first frame of downbeat
+	if not isDownBeat and state.row % 4 == 0 then
+		isDownBeat=true
+		measures=measures+1
+	end
+	
+	if state.row % 4 ~= 0 then
+		isDownBeat=false
+	end
+	
+	local beat=state.row % 4
+	--print("measures: "..measures, 20, 20)
+	if musicplaying then
+		spr(10+beat, beat*4, 0, 14, 2, 0, 0, 1, 1)
+	end
+
+	if currentTrack == 0 then
+		print("Get ready"..string.rep(".",measures-1).."!", 84, 30, 2)
+	end
 
 	--octopi
-	bounce=t%60//30==0 and 0 or -3
+	local bounce=t%60//30==0 and 0 or -3
 	spr(33,
 						player.x+offset.x,
 						player.y+offset.y+bounce,
@@ -175,7 +261,47 @@ function TIC()
 						leader.x+offset.x,
 						leader.y+offset.y+(isDownBeat and -5 or 0),
 						14,2,0,0,2,2)
+end
 
+function gameEnd()
+	cls(13)
+	
+	local total=getTotalNotes(1)
+	print("Game end!!",90,90)
+	print("Score: "..score.."/"..total,90,100)
+	if score==total then
+		print("Perfect score!!!!!!",70,110,2)
+	end
+	
+	drawComputer()
+	
+	spr(35,
+						player.x+offset.x,
+						player.y+offset.y+(t%60//20==0 and 0 or -10),
+						14,2,0,0,2,2)
+	spr(67,
+						leader.x+offset.x,
+						leader.y+offset.y+(t%60//20==1 and 0 or -10),
+						14,2,0,0,2,2)
+end
+
+
+function TIC()
+	-- ensure we only start the music a single time
+ if not musicplaying and currentTrack+1 < endTrack then
+  currentTrack = currentTrack+1
+  music(currentTrack,0,0,false)
+  musicplaying = true
+ end
+
+	if not musicplaying and currentTrack + 1 == endTrack then
+		gameEnd()
+	else
+		mainGame()
+	end
+	
+	print(getTotalNotes(1), 20, 20)
+	
 	t=t+1
 end
 
@@ -203,8 +329,8 @@ end
 -- 025:ffffffcfcccccccffffffffffffeeeeefffffffefcfcfcffcfcfcfffffffffff
 -- 033:e3ee33333ee333333e3333333e33f3333e33f3333e3333333e3333443e333422
 -- 034:3333ee3e33333ee3333333e33f3333e33f3333e3333333e3333333e3433333e3
--- 035:e3ee33333ee333333e3333333e3333333e33ff333e3333333e3333443e333422
--- 036:3333ee3e33333ee3333333e3333333e33ff333e3333333e3333333e3433333e3
+-- 035:e3ee33333ee333333e3333333e33ff333e3f33f33e3333333e3333443e333422
+-- 036:3333ee3e33333ee3333333e333ff33e33f33f3e3333333e3333333e3433333e3
 -- 037:e3ee33333ee333333e3333333e33ff333e33f3333e3333333e3333443e333422
 -- 038:3333ee3e33333ee3333333e33ff333e33f3333e3333333e3333333e3433333e3
 -- 049:3ee3342233ee3344e33ee333ee333333eeee33333ee33e33e333e33eeeee33ee
@@ -215,8 +341,12 @@ end
 -- 054:43333ee33333ee33333ee33e333333ee333eeeee3e33eee333ee333ee333eeee
 -- 065:eaeeaaaaaeeaaaaaaeaaaaaaaeaaaafaaeaaaafaaeaaaaaaaeaaaaaaaeaaaaa9
 -- 066:aaaaeeaeaaaaaeeaaaaaaaeaaaafaaeaaaafaaeaaaaaaaea99aaaaea449aaaea
+-- 067:eaeeaaaaaeeaaaaaaeaaaaaaaeaaffaaaeafaafaaeaaaaaaaeaaaaaaaeaaaaa9
+-- 068:aaaaeeaeaaaaaeeaaaaaaaeaaaffaaeaafaafaeaaaaaaaea99aaaaea449aaaea
 -- 081:aeeaaaa9aaeeaaaaeaaeeaaaeeaaaaaaeeeeeaaaaeeeaaeaeaaaeeaaeeeeaaae
 -- 082:449aaeea99aaeeaaaaaeeaaeaaaaaaeeaaaaeeeeaaeaaeeaeaaeaaaeeeaaeeee
+-- 083:aeeaaaa9aaeeaaaaeaaeeaaaeeaaaaaaeeeeeaaaaeeeaaeaeaaaeeaaeeeeaaae
+-- 084:449aaeea99aaeeaaaaaeeaaeaaaaaaeeaaaaeeeeaaeaaeeaeaaeaaaeeeaaeeee
 -- </TILES>
 
 -- <WAVES>
@@ -230,12 +360,20 @@ end
 -- </SFX>
 
 -- <PATTERNS>
--- 000:4f0106400006100000100000100000100000100000000000400006400006000000000000100000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
--- 001:00f100000000100000100000600006600006100000000000000000000000000000000000100000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 000:4f0106400006100000000000000000000000000000000000400006400006400006400006100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 001:00f100000000000000000000600006600006100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 002:bf0106b00006100000000000000000000000000000000000000000000000600006600006600006600006000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 003:00f100000000000000000000900006100000800006800006100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 004:400006100000000000000000600006100000000000000000400006400006400006400006100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 005:000000000000400006100000000000000000600006100000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 006:bf0106b00006100000600006100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 007:00f100000000000000000000000000800006100000000000400006400006400006400006100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 059:455106100000000000000000400006100000000000000000400006100000000000000000400006100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 -- </PATTERNS>
 
 -- <TRACKS>
--- 000:1800000001800000000000000000000000000000000000000000000000000000000000000000000000000000000000008d0300
+-- 000:c300000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008d0300
+-- 001:1800000001803010000003015810000005817020000007020000000000000000000000000000000000000000000000008d0300
 -- </TRACKS>
 
 -- <PALETTE>
