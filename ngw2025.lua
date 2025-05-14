@@ -11,29 +11,147 @@ t=0
 CENTER={x=120,y=68}
 MAX={x=240,y=136}
 
-player={x=MAX.x*0.67, y=CENTER.y}
-leader={x=MAX.x*0.33, y=CENTER.y}
+PLAYER_ORIGIN={x=MAX.x*0.67, y=CENTER.y}
+LEADER_ORIGIN={x=MAX.x*0.33, y=CENTER.y}
 
 offset={x=-16,y=-16}
 
+SOUND_REGISTERS_ADDR=0x0FF9C
+MUSIC_PATTERNS_ADDR=0x11164
+MUSIC_TRACKS_ADDR=0x13E64
+SOUND_STATE_ADDR=0x13FFC
+
+function getSoundState()
+	state={}
+	
+	state.track=peek(SOUND_STATE_ADDR)
+	state.frame=peek(SOUND_STATE_ADDR+1)
+	state.row=peek(SOUND_STATE_ADDR+2)
+
+	return state
+end
+
+function getTrackPatterns(track,frame)
+	patterns={}
+	
+	local value=0
+	
+	for i=2,0,-1 do
+		value=value|peek(MUSIC_TRACKS_ADDR+51*track+3*frame+i)<<(i*8)
+	end
+	
+	patterns={
+		(value&0x3F)>>0,
+		(value&0xFC0)>>6,
+		(value&0x3F000)>>12,
+		(value&0xFC0000)>>18
+	}
+	
+	return patterns
+end
+
+function getPatternNote(pattern, row)
+	return peek(MUSIC_PATTERNS_ADDR+192*(pattern-1)+3*row)
+end
+	
+function getSoundRegister(channel)
+	sound = {}
+	
+	value = peek(0xFF9C+18*channel+1)<<8|peek(0xFF9C+18*channel)
+	sound.frequency = (value&0x0fff)
+	sound.volume = (value&0xf000)>>12
+	
+	return sound
+end
+
+musicplaying=false
+
 function TIC()
 
+	-- ensure we only start the music a single time
+ if not musicplaying then
+  music(0)
+  musicplaying = true
+ end
+
+	bounce=t%60//30==0 and 0 or -3
 	--if btn(0) then y=y-1 end
 	--if btn(1) then y=y+1 end
-	if btnp(2) then player.x=player.x-1 end
-	if btnp(3) then player.x=player.x+1 end
+	
+	player={
+		x=PLAYER_ORIGIN.x,
+		y=PLAYER_ORIGIN.y
+	}
+	
+	leader={
+		x=LEADER_ORIGIN.x,
+		y=LEADER_ORIGIN.y
+	}
 
 	cls(13)
 	--spr(33+t%60//30*2,x,y,14,2,0,0,2,2)
 	--computer
-	spr(8,CENTER.x+offset.x,CENTER.y+offset.y,14,2,0,0,2,2)
+	spr(8,
+						CENTER.x+offset.x,
+						CENTER.y+offset.y,
+						14,2,0,0,2,2)
 	
 	--octopi
-	spr(33,player.x+offset.x,player.y+offset.y,14,2,0,0,2,2)
-	spr(65,leader.x+offset.x,leader.y+offset.y,14,2,0,0,2,2)
+	spr(33,
+						player.x+offset.x,
+						player.y+offset.y+bounce,
+						14,2,0,0,2,2)
+	spr(65,
+						leader.x+offset.x,
+						leader.y+offset.y-bounce,
+						14,2,0,0,2,2)
 
+	print("Catch the music!!",74,104)
+	
+	if btn(2) then 
+		-- player.x=player.x-16
+		print("L!", 
+			player.x+offset.x, 
+			player.y-16+offset.y) 
+	elseif btn(3) then
+		-- player.x=player.x+16 
+		print("R!", 
+			player.x+16+8+offset.x, 
+			player.y-16+offset.y)
+	end
+	
+	if btnp(2) then 
+		-- player.x=player.x-16
+		print("hit!", 
+			player.x+offset.x, 
+			player.y-16+offset.y-10) 
+	elseif btnp(3) then 
+		-- player.x=player.x-16
+		print("hit!", 
+			player.x+16+8+offset.x, 
+			player.y-16+offset.y-10) 
+	end
+	
+	state=getSoundState()
+	print("track: "..state.track,20,120)
+	print("frame: "..state.frame,80,120)
+	print("row: "..state.row,160,120)
 
-	-- print("Catch the bugs!!",84,84)
+	patterns=getTrackPatterns(state.track,state.frame)
+
+	for p=1,4 do
+		print("p"..p..": "..patterns[p], p*30+30, 20)
+	end
+
+	note0=getPatternNote(patterns[1],state.row)
+	 
+	print("pattern: "..patterns[1],20,130)
+	print("note: "..note0,80,130)
+
+	if state.row % 4 == 0 then
+		spr(23, 0, 0, 14, 2, 0, 0, 1, 1)
+	end
+
 	t=t+1
 end
 
@@ -53,6 +171,7 @@ end
 -- 020:ccca00ccaaaa0ccecaaa0ceeaaaa0ceeaaaa0cee8888ccee000cceeecccceeee
 -- 021:000000000cc222200cc2cc200c22c22000000000eee00eee00c0c0c00c0c0c00
 -- 022:eeeeeaeeeeeeeaaeeeeeaeaeeeeeaeeaeaaeaeeaaaaaeeeaaaaaeeaeeaaeeeee
+-- 023:eeeeeeeeeeeeeeeeeeeeeeeeeee88eeeeee88eeeeeeeeeeeeeeeeeeeeeeeeeee
 -- 024:fcfffffffcccccccffffffffeeeeefffeffffffffffcfcfcffcfcfcfffffffff
 -- 025:ffffffcfcccccccffffffffffffeeeeefffffffefcfcfcffcfcfcfffffffffff
 -- 033:e3ee33333ee333333e3333333e33f3333e33f3333e3333333e3333443e333422
