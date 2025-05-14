@@ -51,7 +51,8 @@ function getTrackPatterns(track,frame)
 end
 
 function getPatternNote(pattern, row)
-	return peek(MUSIC_PATTERNS_ADDR+192*(pattern-1)+3*row)
+	-- get last four bits
+	return peek(MUSIC_PATTERNS_ADDR+192*(pattern-1)+3*row)& 0x0F
 end
 	
 function getSoundRegister(channel)
@@ -67,16 +68,11 @@ end
 musicplaying=false
 
 function TIC()
-
 	-- ensure we only start the music a single time
  if not musicplaying then
   music(0)
   musicplaying = true
  end
-
-	bounce=t%60//30==0 and 0 or -3
-	--if btn(0) then y=y-1 end
-	--if btn(1) then y=y+1 end
 	
 	player={
 		x=PLAYER_ORIGIN.x,
@@ -89,23 +85,6 @@ function TIC()
 	}
 
 	cls(13)
-	--spr(33+t%60//30*2,x,y,14,2,0,0,2,2)
-	--computer
-	spr(8,
-						CENTER.x+offset.x,
-						CENTER.y+offset.y,
-						14,2,0,0,2,2)
-	
-	--octopi
-	spr(33,
-						player.x+offset.x,
-						player.y+offset.y+bounce,
-						14,2,0,0,2,2)
-	spr(65,
-						leader.x+offset.x,
-						leader.y+offset.y-bounce,
-						14,2,0,0,2,2)
-
 	print("Catch the music!!",74,104)
 	
 	if btn(2) then 
@@ -133,24 +112,69 @@ function TIC()
 	end
 	
 	state=getSoundState()
-	print("track: "..state.track,20,120)
-	print("frame: "..state.frame,80,120)
-	print("row: "..state.row,160,120)
+	--print("track: "..state.track,20,120)
+	--print("frame: "..state.frame,80,120)
+	--print("row: "..state.row,160,120)
 
 	patterns=getTrackPatterns(state.track,state.frame)
 
 	for p=1,4 do
-		print("p"..p..": "..patterns[p], p*30+30, 20)
+		--print("p"..p..": "..patterns[p], p*30+30, 130)
+	end
+	
+	chNotes={}
+	for i=0,3 do
+		chNotes[i+1]=getPatternNote(patterns[i+1],state.row)
+		--print("ch"..i.." note: "..chNotes[i+1], 50, 10+i*10)
+	end
+	
+	-- TODO: clean up
+	if chNotes[1] >= 4 then
+		spr(22,
+							leader.x+offset.x-8,
+							leader.y+offset.y-16-8,
+							14,2,0,0,1,1)
+	elseif chNotes[2] >= 4 then
+		spr(22,
+							leader.x+offset.x+16+8,
+							leader.y+offset.y-16-8,
+							14,2,0,0,1,1)
+	end
+	
+	if chNotes[3] >= 4 then 
+		spr(6, 
+			player.x+offset.x, 
+			player.y-24+offset.y,
+			14,2,0,0,1,1)
+	elseif chNotes[4] >= 4 then
+		spr(6,
+			player.x+16+8+offset.x, 
+			player.y-24+offset.y,
+			14,2,0,0,1,1)
 	end
 
-	note0=getPatternNote(patterns[1],state.row)
-	 
-	print("pattern: "..patterns[1],20,130)
-	print("note: "..note0,80,130)
+	-- DRAW
+	--spr(33+t%60//30*2,x,y,14,2,0,0,2,2)
+	--computer
+	spr(8,
+						CENTER.x+offset.x,
+						CENTER.y+offset.y,
+						14,2,0,0,2,2)
 
-	if state.row % 4 == 0 then
-		spr(23, 0, 0, 14, 2, 0, 0, 1, 1)
-	end
+	isDownBeat=state.row % 4 == 0
+	beat=state.row % 4
+	spr(10+beat, beat*4, 0, 14, 2, 0, 0, 1, 1)
+
+	--octopi
+	bounce=t%60//30==0 and 0 or -3
+	spr(33,
+						player.x+offset.x,
+						player.y+offset.y+bounce,
+						14,2,0,0,2,2)
+	spr(65,
+						leader.x+offset.x,
+						leader.y+offset.y+(isDownBeat and -5 or 0),
+						14,2,0,0,2,2)
 
 	t=t+1
 end
@@ -165,13 +189,16 @@ end
 -- 007:eeeeeeeeee2eeeeee2e2eeeeee2eeeeeeeeeeeeeeeeee2eeeeeeeeeeeeeeeeee
 -- 008:fffffffffcccccccfcfffffffcfffffffc77ff99fcfffffffcff222ffcffffff
 -- 009:ffffffffcccccccfffffffcfffffffcfff11ffcfffffffcf4444ffcfffffffcf
+-- 010:eeeeeeeeeeeeeeeeeeeeeeeeeee88eeeeee88eeeeeeeeeeeeeeeeeeeeeeeeeee
+-- 011:eeeeeeeeeeeeeeeeeeeeeeeeeeeaaeeeeeeaaeeeeeeeeeeeeeeeeeeeeeeeeeee
+-- 012:eeeeeeeeeeeeeeeeeeeeeeeeeeeaaeeeeeeaaeeeeeeeeeeeeeeeeeeeeeeeeeee
+-- 013:eeeeeeeeeeeeeeeeeeeeeeeeeeeaaeeeeeeaaeeeeeeeeeeeeeeeeeeeeeeeeeee
 -- 017:cacccccccaaaaaaacaaacaaacaaaaccccaaaaaaac8888888cc000cccecccccec
 -- 018:ccca00ccaaaa0ccecaaa0ceeaaaa0ceeaaaa0cee8888ccee000cceeecccceeee
 -- 019:cacccccccaaaaaaacaaacaaacaaaaccccaaaaaaac8888888cc000cccecccccec
 -- 020:ccca00ccaaaa0ccecaaa0ceeaaaa0ceeaaaa0cee8888ccee000cceeecccceeee
 -- 021:000000000cc222200cc2cc200c22c22000000000eee00eee00c0c0c00c0c0c00
 -- 022:eeeeeaeeeeeeeaaeeeeeaeaeeeeeaeeaeaaeaeeaaaaaeeeaaaaaeeaeeaaeeeee
--- 023:eeeeeeeeeeeeeeeeeeeeeeeeeee88eeeeee88eeeeeeeeeeeeeeeeeeeeeeeeeee
 -- 024:fcfffffffcccccccffffffffeeeeefffeffffffffffcfcfcffcfcfcfffffffff
 -- 025:ffffffcfcccccccffffffffffffeeeeefffffffefcfcfcffcfcfcfffffffffff
 -- 033:e3ee33333ee333333e3333333e33f3333e33f3333e3333333e3333443e333422
@@ -203,11 +230,12 @@ end
 -- </SFX>
 
 -- <PATTERNS>
--- 000:400006400006100000100000600006600006100000000000400006400006000000000000100000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 000:4f0106400006100000100000100000100000100000000000400006400006000000000000100000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+-- 001:00f100000000100000100000600006600006100000000000000000000000000000000000100000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 -- </PATTERNS>
 
 -- <TRACKS>
--- 000:100000100000100000100000000000000000000000000000000000000000000000000000000000000000000000000000000300
+-- 000:1800000001800000000000000000000000000000000000000000000000000000000000000000000000000000000000008d0300
 -- </TRACKS>
 
 -- <PALETTE>
