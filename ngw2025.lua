@@ -5,302 +5,251 @@
 -- license: MIT License (change this to your license of choice)
 -- version: 0.1
 -- script:  lua
+t = 0
 
-t=0
+CENTER = {x = 120, y = 68}
+MAX = {x = 240, y = 136}
 
-CENTER={x=120,y=68}
-MAX={x=240,y=136}
+PLAYER_ORIGIN = {x = MAX.x * 0.67, y = CENTER.y}
+LEADER_ORIGIN = {x = MAX.x * 0.33, y = CENTER.y}
 
-PLAYER_ORIGIN={x=MAX.x*0.67, y=CENTER.y}
-LEADER_ORIGIN={x=MAX.x*0.33, y=CENTER.y}
+offset = {x = -16, y = -16}
 
-offset={x=-16,y=-16}
-
-SOUND_REGISTERS_ADDR=0x0FF9C
-MUSIC_PATTERNS_ADDR=0x11164
-MUSIC_TRACKS_ADDR=0x13E64
-SOUND_STATE_ADDR=0x13FFC
+SOUND_REGISTERS_ADDR = 0x0FF9C
+MUSIC_PATTERNS_ADDR = 0x11164
+MUSIC_TRACKS_ADDR = 0x13E64
+SOUND_STATE_ADDR = 0x13FFC
 
 function getSoundState()
-	local state={}
-	
-	state.track=peek(SOUND_STATE_ADDR)
-	state.frame=peek(SOUND_STATE_ADDR+1)
-	state.row=peek(SOUND_STATE_ADDR+2)
+    local state = {}
 
-	return state
+    state.track = peek(SOUND_STATE_ADDR)
+    state.frame = peek(SOUND_STATE_ADDR + 1)
+    state.row = peek(SOUND_STATE_ADDR + 2)
+
+    return state
 end
 
-function getTrackPatterns(track,frame)
-	local patterns={}
-	
-	local value=0
-	
-	for i=2,0,-1 do
-		value=value|peek(MUSIC_TRACKS_ADDR+51*track+3*frame+i)<<(i*8)
-	end
-	
-	patterns={
-		(value&0x3F)>>0,
-		(value&0xFC0)>>6,
-		(value&0x3F000)>>12,
-		(value&0xFC0000)>>18
-	}
-	
-	return patterns
+function getTrackPatterns(track, frame)
+    local patterns = {}
+
+    local value = 0
+
+    for i = 2, 0, -1 do
+        value = value | peek(MUSIC_TRACKS_ADDR + 51 * track + 3 * frame + i) <<
+                    (i * 8)
+    end
+
+    patterns = {
+        (value & 0x3F) >> 0, (value & 0xFC0) >> 6, (value & 0x3F000) >> 12,
+        (value & 0xFC0000) >> 18
+    }
+
+    return patterns
 end
 
 function getPatternNote(pattern, row)
-	-- get last four bits
-	return peek(MUSIC_PATTERNS_ADDR+192*(pattern-1)+3*row)& 0x0F
+    -- get last four bits
+    return peek(MUSIC_PATTERNS_ADDR + 192 * (pattern - 1) + 3 * row) & 0x0F
 end
 
 function getTotalNotes(track)
-	local totalNotes=0
-	for frame=0,15 do
-		local patterns=getTrackPatterns(track,frame)
-		
-		local chNotes={}
-		for row=0,15 do
-			for i=0,1 do
-				note=getPatternNote(patterns[i+1],row)
-				if note == 1 then
-					totalNotes=totalNotes+1
-				end
-			end
-		end
-	end
-	return totalNotes
+    local totalNotes = 0
+    for frame = 0, 15 do
+        local patterns = getTrackPatterns(track, frame)
+
+        for row = 0, 15 do
+            for i = 0, 1 do
+                note = getPatternNote(patterns[i + 1], row)
+                if note == 1 then totalNotes = totalNotes + 1 end
+            end
+        end
+    end
+    return totalNotes
 end
-TOTAL_NOTES=getTotalNotes(1)
+TOTAL_NOTES = getTotalNotes(1)
 
 function getSoundRegister(channel)
-	local sound = {}
-	
-	local value = peek(0xFF9C+18*channel+1)<<8|peek(0xFF9C+18*channel)
-	sound.frequency = (value&0x0fff)
-	sound.volume = (value&0xf000)>>12
-	
-	return sound
+    local sound = {}
+
+    local value = peek(0xFF9C + 18 * channel + 1) << 8 |
+                      peek(0xFF9C + 18 * channel)
+    sound.frequency = (value & 0x0fff)
+    sound.volume = (value & 0xf000) >> 12
+
+    return sound
 end
 
 function drawComputer(beat)
-	spr(8+(beat % 2)*2,
-						CENTER.x+offset.x,
-						CENTER.y+offset.y,
-						14,2,0,0,2,2)
+    spr(8 + (beat % 2) * 2, CENTER.x + offset.x, CENTER.y + offset.y, 14, 2, 0,
+        0, 2, 2)
 end
 
---function init()
-musicplaying=false
-endTrack=2
-currentTrack=-1
-measures=0
-isDownBeat=false
+-- function init()
+musicplaying = false
+endTrack = 2
+currentTrack = -1
+measures = 0
+isDownBeat = false
 
-score=0
+score = 0
 
-player={
-	x=PLAYER_ORIGIN.x,
-	y=PLAYER_ORIGIN.y
-}
+player = {x = PLAYER_ORIGIN.x, y = PLAYER_ORIGIN.y}
 
-leader={
-	x=LEADER_ORIGIN.x,
-	y=LEADER_ORIGIN.y
-}
+leader = {x = LEADER_ORIGIN.x, y = LEADER_ORIGIN.y}
 
-rowHits={
-	L=false,
-	R=false
-}
---end
+rowHits = {L = false, R = false}
+-- end
 
 function mainGame()
-	cls(13)
-	print("Catch the music!!",74,100)
-	--print("currentTrack: "..currentTrack, 30, 10)
-	print("Score: "..score,95, 110)
-	
-	local state=getSoundState()
-	--print("track: "..state.track,20,120)
-	--print("frame: "..state.frame,80,120)
-	--print("row: "..state.row,160,120)
+    cls(13)
+    print("Catch the music!!", 74, 100)
+    -- print("currentTrack: "..currentTrack, 30, 10)
+    print("Score: " .. score, 95, 110)
 
-	if state.track == 255 then
-		musicplaying = false
-	end
+    local state = getSoundState()
+    -- print("track: "..state.track,20,120)
+    -- print("frame: "..state.frame,80,120)
+    -- print("row: "..state.row,160,120)
 
-	local patterns=getTrackPatterns(state.track,state.frame)
+    if state.track == 255 then musicplaying = false end
 
-	for p=1,4 do
-		--print("p"..p..": "..patterns[p], p*30+30, 130)
-	end
-	
-	local chNotes={}
-	for i=0,3 do
-		chNotes[i+1]=getPatternNote(patterns[i+1],state.row)
-		--print("ch"..i.." note: "..chNotes[i+1], 50, 10+i*10)
-	end
-	
-	local isLeaderPlaying={
-		L=chNotes[1] >= 4,
-		noteL=chNotes[1],
-		R=chNotes[2] >= 4,
-		noteR=chNotes[2]
-	}
-	
-	local isPlayerPlaying={
-		L=chNotes[3] >= 4,
-		noteL=chNotes[3],
-		R=chNotes[4] >= 4,
-		noteR=chNotes[4]
-	}
-	
-	if not isPlayerPlaying.L then
-		rowHits.L=false
-	end
-	
-	if not isPlayerPlaying.R then
-		rowHits.R=false
-	end
-	
-	-- TODO: clean up
-	if currentTrack > 0 and isLeaderPlaying.L then
-		spr(22,
-							leader.x+offset.x-8,
-							leader.y+offset.y-16-8,
-							14,2,0,0,1,1)
-	elseif currentTrack > 0 and isLeaderPlaying.R then
-		spr(22,
-							leader.x+offset.x+16+8,
-							leader.y+offset.y-16-8,
-							14,2,0,0,1,1)
-	end
-	
-	if currentTrack > 0 and isPlayerPlaying.L then
-		if btnp(2) and not rowHits.L then
-				rowHits.L=true
-				score=score+1
-		end
-		
-		if rowHits.L then
-			spr(7,
-				player.x+offset.x, 
-				player.y-24+offset.y,
-				14,2,0,0,1,1)
-		elseif not rowHits.L then
-			spr(6,
-				player.x+offset.x, 
-				player.y-24+offset.y,
-				14,2,0,0,1,1)
-		end
-		
-	elseif currentTrack > 0 and isPlayerPlaying.R then
-		if btnp(3) and not rowHits.R then
-			rowHits.R=true
-			score=score+1
-		end
-		
-		if rowHits.R then
-			spr(7,
-				player.x+16+8+offset.x, 
-				player.y-24+offset.y,
-				14,2,0,0,1,1)
-		elseif not rowHits.R then
-			spr(6,
-				player.x+16+8+offset.x, 
-				player.y-24+offset.y,
-				14,2,0,0,1,1)
-		end
-	end
+    local patterns = getTrackPatterns(state.track, state.frame)
 
-	--only inc measures on first frame of downbeat
-	if not isDownBeat and state.row % 4 == 0 then
-		isDownBeat=true
-		measures=measures+1
-	end
-	
-	if state.row % 4 ~= 0 then
-		isDownBeat=false
-	end
-	
-	local beat=state.row % 4
-	--print("measures: "..measures, 20, 20)
-	if musicplaying then
-		spr(97+beat, beat*4, 0, 14, 2, 0, 0, 1, 1)
-	end
-	
-	drawComputer(beat)
+    for p = 1, 4 do
+        -- print("p"..p..": "..patterns[p], p*30+30, 130)
+    end
 
-	if currentTrack == 0 then
-		print("Get ready"..string.rep(".",4-measures).."!", 84, 30, 2)
-	end
+    local chNotes = {}
+    for i = 0, 3 do
+        chNotes[i + 1] = getPatternNote(patterns[i + 1], state.row)
+        -- print("ch"..i.." note: "..chNotes[i+1], 50, 10+i*10)
+    end
 
-	--octopi
-	local bounce=t%60//30==0 and 0 or -3
-	local playerSprite=33
-	if btn(2) or btn(3) then
-		playerSprite=playerSprite+4
-	end
-	local leaderSprite=65
-	if currentTrack > 0 and (isLeaderPlaying.L or isLeaderPlaying.R) then
-		leaderSprite=leaderSprite+4
-	end
-	
-	spr(playerSprite,
-						player.x+offset.x,
-						player.y+offset.y+bounce,
-						14,2,
-						(btn(3) and 1 or 0),
-						0,2,2)
-	spr(leaderSprite,
-						leader.x+offset.x,
-						leader.y+offset.y+(isDownBeat and -5 or 0),
-						14,2,
-						(isLeaderPlaying.R and 1 or 0),
-						0,2,2)
+    local isLeaderPlaying = {
+        L = chNotes[1] >= 4,
+        noteL = chNotes[1],
+        R = chNotes[2] >= 4,
+        noteR = chNotes[2]
+    }
+
+    local isPlayerPlaying = {
+        L = chNotes[3] >= 4,
+        noteL = chNotes[3],
+        R = chNotes[4] >= 4,
+        noteR = chNotes[4]
+    }
+
+    if not isPlayerPlaying.L then rowHits.L = false end
+
+    if not isPlayerPlaying.R then rowHits.R = false end
+
+    -- TODO: clean up
+    if currentTrack > 0 and isLeaderPlaying.L then
+        spr(22, leader.x + offset.x - 8, leader.y + offset.y - 16 - 8, 14, 2, 0,
+            0, 1, 1)
+    elseif currentTrack > 0 and isLeaderPlaying.R then
+        spr(22, leader.x + offset.x + 16 + 8, leader.y + offset.y - 16 - 8, 14,
+            2, 0, 0, 1, 1)
+    end
+
+    if currentTrack > 0 and isPlayerPlaying.L then
+        if btnp(2) and not rowHits.L then
+            rowHits.L = true
+            score = score + 1
+        end
+
+        if rowHits.L then
+            spr(7, player.x + offset.x, player.y - 24 + offset.y, 14, 2, 0, 0,
+                1, 1)
+        elseif not rowHits.L then
+            spr(6, player.x + offset.x, player.y - 24 + offset.y, 14, 2, 0, 0,
+                1, 1)
+        end
+
+    elseif currentTrack > 0 and isPlayerPlaying.R then
+        if btnp(3) and not rowHits.R then
+            rowHits.R = true
+            score = score + 1
+        end
+
+        if rowHits.R then
+            spr(7, player.x + 16 + 8 + offset.x, player.y - 24 + offset.y, 14,
+                2, 0, 0, 1, 1)
+        elseif not rowHits.R then
+            spr(6, player.x + 16 + 8 + offset.x, player.y - 24 + offset.y, 14,
+                2, 0, 0, 1, 1)
+        end
+    end
+
+    -- only inc measures on first frame of downbeat
+    if not isDownBeat and state.row % 4 == 0 then
+        isDownBeat = true
+        measures = measures + 1
+    end
+
+    if state.row % 4 ~= 0 then isDownBeat = false end
+
+    local beat = state.row % 4
+    -- print("measures: "..measures, 20, 20)
+    if musicplaying then spr(97 + beat, beat * 4, 0, 14, 2, 0, 0, 1, 1) end
+
+    drawComputer(beat)
+
+    if currentTrack == 0 then
+        print("Get ready" .. string.rep(".", 4 - measures) .. "!", 84, 30, 2)
+    end
+
+    -- octopi
+    local bounce = t % 60 // 30 == 0 and 0 or -3
+    local playerSprite = 33
+    if btn(2) or btn(3) then playerSprite = playerSprite + 4 end
+    local leaderSprite = 65
+    if currentTrack > 0 and (isLeaderPlaying.L or isLeaderPlaying.R) then
+        leaderSprite = leaderSprite + 4
+    end
+
+    spr(playerSprite, player.x + offset.x, player.y + offset.y + bounce, 14, 2,
+        (btn(3) and 1 or 0), 0, 2, 2)
+    spr(leaderSprite, leader.x + offset.x,
+        leader.y + offset.y + (isDownBeat and -5 or 0), 14, 2,
+        (isLeaderPlaying.R and 1 or 0), 0, 2, 2)
 end
 
 function gameEnd()
-	cls(13)
-	
-	--local total=getTotalNotes(1)
-	print("Game end!!",94,90)
-	print("Score: "..score.."/"..TOTAL_NOTES,90,100)
-	if score==TOTAL_NOTES then
-		print("Perfect score!!!!!!",75,110,7)
-	end
-	
-	drawComputer(0)
-	
-	spr(35,
-						player.x+offset.x,
-						player.y+offset.y+(t%60//20==0 and 0 or -10),
-						14,2,0,0,2,2)
-	spr(67,
-						leader.x+offset.x,
-						leader.y+offset.y+(t%60//20==1 and 0 or -10),
-						14,2,0,0,2,2)
+    cls(13)
+
+    -- local total=getTotalNotes(1)
+    print("Game end!!", 94, 90)
+    print("Score: " .. score .. "/" .. TOTAL_NOTES, 90, 100)
+    if score == TOTAL_NOTES then print("Perfect score!!!!!!", 75, 110, 7) end
+
+    drawComputer(0)
+
+    spr(35, player.x + offset.x,
+        player.y + offset.y + (t % 60 // 20 == 0 and 0 or -10), 14, 2, 0, 0, 2,
+        2)
+    spr(67, leader.x + offset.x,
+        leader.y + offset.y + (t % 60 // 20 == 1 and 0 or -10), 14, 2, 0, 0, 2,
+        2)
 end
 
-
 function TIC()
-	-- ensure we only start the music a single time
- if not musicplaying and currentTrack+1 < endTrack then
-  currentTrack = currentTrack+1
-  music(currentTrack,0,0,false)
-  musicplaying = true
- end
+    -- ensure we only start the music a single time
+    if not musicplaying and currentTrack + 1 < endTrack then
+        currentTrack = currentTrack + 1
+        music(currentTrack, 0, 0, false)
+        musicplaying = true
+    end
 
-	if not musicplaying and currentTrack + 1 == endTrack then
-		gameEnd()
-	else
-		mainGame()
-	end
+    if not musicplaying and currentTrack + 1 == endTrack then
+        gameEnd()
+    else
+        mainGame()
+    end
 
-	--print(getTotalNotes(1), 20, 20)
-	t=t+1
+    -- print(getTotalNotes(1), 20, 20)
+    t = t + 1
 end
 
 -- <TILES>
